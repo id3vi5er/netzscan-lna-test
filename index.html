@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Netzscan LNA-Test</title>
+<style>
+  :root { --bg:#f4f6f8; --fg:#17202a; --muted:#6b7785; --card:#fff; --line:#dbe1e7;
+          --ok:#1f8f4e; --warn:#a15c00; --bad:#c0392b; --acc:#0e8f8e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1419; --fg:#e3e9ef; --muted:#8a97a6; --card:#171e26; --line:#2a3542;
+            --ok:#4cc47f; --warn:#f0a640; --bad:#ef6b5b; --acc:#2cc4c2; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, "Segoe UI", sans-serif; }
+  main { max-width:1000px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  .lead { color:var(--muted); margin:0 0 14px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px 14px; }
+  label { display:grid; gap:3px; font-size:12px; color:var(--muted); }
+  input { font:13px ui-monospace, Consolas, monospace; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  button { font:inherit; font-weight:600; background:var(--acc); color:#fff; border:0; border-radius:7px; padding:8px 16px; cursor:pointer; margin:10px 8px 0 0; }
+  button.sec { background:transparent; color:var(--acc); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:default; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  td code, .mono { font:12px ui-monospace, Consolas, monospace; word-break:break-all; }
+  .ok { color:var(--ok); font-weight:600; } .bad { color:var(--bad); font-weight:600; } .warn { color:var(--warn); font-weight:600; }
+  .muted { color:var(--muted); }
+  #status { color:var(--muted); margin-left:4px; }
+  .scroll { overflow-x:auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Netzscan · Local-Network-Access-Test</h1>
+  <p class="lead">Prüft, welche Zugriffe ins lokale Netz von dieser Seite aus erlaubt sind. Angefragt werden nur
+    die unten eingetragenen Adressen. Ergebnisse bleiben im Browser, bis du sie selbst kopierst.
+    Chrome fragt beim ersten Zugriff nach „Geräte im lokalen Netz“ – bitte <b>erlauben</b>.</p>
+
+  <section>
+    <h2>Umgebung</h2>
+    <div class="scroll"><table id="env"></table></div>
+  </section>
+
+  <section>
+    <h2>Ziele</h2>
+    <div class="grid">
+      <label>Gateway (HTTP-Oberfläche)<input id="gw" value="192.168.178.1"></label>
+      <label>Gerät mit Weboberfläche, Host:Port<input id="web" value="192.168.178.12:8123"></label>
+      <label>Bildpfad auf diesem Gerät<input id="img" value="/static/images/home-assistant-logo-loading.svg"></label>
+      <label>Shelly Gen2+ (WebSocket)<input id="shelly" value="192.168.178.30"></label>
+      <label>ESPHome (EventSource, CORS)<input id="esphome" value="192.168.178.41"></label>
+      <label>Nicht vorhandene Adresse<input id="nohost" value="192.168.178.250"></label>
+    </div>
+    <button id="run">Test starten</button>
+    <button id="copy" class="sec" disabled>Ergebnis kopieren (JSON)</button>
+    <span id="status"></span>
+  </section>
+
+  <section>
+    <h2>Ergebnisse</h2>
+    <div class="scroll"><table id="out"><tr><td class="muted">Noch kein Lauf.</td></tr></table></div>
+  </section>
+</main>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const FIELDS = ['gw', 'web', 'img', 'shelly', 'esphome', 'nohost'];
+try {
+  const saved = JSON.parse(localStorage.getItem('lna-test') || '{}');
+  for (const f of FIELDS) if (saved[f]) $(f).value = saved[f];
+} catch {}
+
+// --- Umgebung ------------------------------------------------------------------
+async function permState(name) {
+  try { return (await navigator.permissions.query({ name })).state; }
+  catch (e) { return `– (${e.name})`; }
+}
+async function env() {
+  const ua = navigator.userAgentData;
+  const brands = ua?.brands?.map((b) => `${b.brand} ${b.version}`).join(', ') || '';
+  return {
+    origin: location.origin,
+    secureContext: window.isSecureContext,
+    userAgent: navigator.userAgent,
+    brands,
+    'permission local-network-access': await permState('local-network-access'),
+    'permission local-network': await permState('local-network'),
+    'permission loopback-network': await permState('loopback-network'),
+    time: new Date().toISOString(),
+  };
+}
+async function showEnv() {
+  const e = await env();
+  $('env').innerHTML = Object.entries(e).map(([k, v]) => `<tr><td class="muted">${k}</td><td class="mono">${String(v)}</td></tr>`).join('');
+  return e;
+}
+showEnv();
+
+// --- Messbausteine ---------------------------------------------------------------
+const now = () => performance.now();
+
+async function tFetch(url, opts = {}, timeout = 4000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  const t0 = now();
+  try {
+    const r = await fetch(url, { cache: 'no-store', credentials: 'omit', signal: ctrl.signal, ...opts });
+    let body = '';
+    if (r.type !== 'opaque') { try { body = (await r.text()).slice(0, 120); } catch {} }
+    return { result: 'ok', type: r.type, status: r.status, ms: now() - t0, body };
+  } catch (e) {
+    return { result: ctrl.signal.aborted ? 'timeout' : 'error', error: `${e.name}: ${e.message}`, ms: now() - t0 };
+  } finally { clearTimeout(timer); }
+}
+
+function tImg(url, timeout = 4000) {
+  return new Promise((res) => {
+    const img = new Image();
+    const t0 = now();
+    const timer = setTimeout(() => res({ result: 'timeout', ms: now() - t0 }), timeout);
+    img.onload = () => { clearTimeout(timer); res({ result: 'ok', size: `${img.naturalWidth}x${img.naturalHeight}`, ms: now() - t0, finalSrc: img.currentSrc }); };
+    img.onerror = () => { clearTimeout(timer); res({ result: 'error', ms: now() - t0, finalSrc: img.currentSrc }); };
+    img.referrerPolicy = 'no-referrer';
+    img.src = url;
+  });
+}
+
+function tWs(url, timeout = 4000) {
+  return new Promise((res) => {
+    const t0 = now();
+    let ws;
+    try { ws = new WebSocket(url); } catch (e) { res({ result: 'error', error: `${e.name}: ${e.message}`, ms: now() - t0 }); return; }
+    const timer = setTimeout(() => { ws.close(); res({ result: 'timeout', ms: now() - t0 }); }, timeout);
+    ws.onopen = () => ws.send(JSON.stringify({ id: 1, src: 'lna-test', method: 'Shelly.GetDeviceInfo' }));
+    ws.onmessage = (e) => { clearTimeout(timer); ws.close(); res({ result: 'ok', ms: now() - t0, body: e.data.slice(0, 120) }); };
+    ws.onerror = () => { clearTimeout(timer); res({ result: 'error', ms: now() - t0 }); };
+  });
+}
+
+function tEs(url, timeout = 4000) {
+  return new Promise((res) => {
+    const t0 = now();
+    let es;
+    try { es = new EventSource(url); } catch (e) { res({ result: 'error', error: `${e.name}: ${e.message}`, ms: now() - t0 }); return; }
+    const timer = setTimeout(() => { es.close(); res({ result: 'timeout', ms: now() - t0 }); }, timeout);
+    es.addEventListener('ping', (e) => { clearTimeout(timer); es.close(); res({ result: 'ok', ms: now() - t0, body: e.data.slice(0, 120) }); });
+    es.onerror = () => { clearTimeout(timer); es.close(); res({ result: 'error', ms: now() - t0 }); };
+  });
+}
+
+// --- Testliste: [Gruppe, Name, Erwartung für Netzscan, Funktion] ----------------
+function tests(v) {
+  const L = { targetAddressSpace: 'local' };
+  const P = { targetAddressSpace: 'private' };
+  return [
+    ['fetch', 'Gateway http, no-cors, targetAddressSpace "local"', 'ok', () => tFetch(`http://${v.gw}/`, { mode: 'no-cors', ...L })],
+    ['fetch', 'Gateway http, no-cors, ohne Option', 'Mixed Content?', () => tFetch(`http://${v.gw}/`, { mode: 'no-cors' })],
+    ['fetch', 'Gateway http, no-cors, targetAddressSpace "private"', 'älterer Name', () => tFetch(`http://${v.gw}/`, { mode: 'no-cors', ...P })],
+    ['timing', 'Gateway geschlossener Port :4 (RST)', 'error nach ~2 s (Windows)', () => tFetch(`http://${v.gw}:4/`, { mode: 'no-cors', ...L })],
+    ['timing', 'Gateway :445 (offen, kein HTTP)', 'schneller error', () => tFetch(`http://${v.gw}:445/`, { mode: 'no-cors', ...L })],
+    ['timing', 'nicht vorhandene Adresse', 'timeout', () => tFetch(`http://${v.nohost}/`, { mode: 'no-cors', ...L })],
+    ['timing', 'Gateway https (eigenes Zertifikat)', 'schneller error', () => tFetch(`https://${v.gw}/`, { mode: 'no-cors', ...L })],
+    ['fetch', 'Weboberfläche http, no-cors, "local"', 'ok', () => tFetch(`http://${v.web}/`, { mode: 'no-cors', ...L })],
+    ['cors', 'ESPHome / lesbar per CORS, "local"', 'ok + Inhalt', () => tFetch(`http://${v.esphome}/`, { mode: 'cors', ...L })],
+    ['img', 'Bildsignatur http', 'Auto-Upgrade auf https?', () => tImg(`http://${v.web}${v.img}`)],
+    ['img', 'Gateway-Favicon http', 'Auto-Upgrade auf https?', () => tImg(`http://${v.gw}/favicon.ico`)],
+    ['ws', 'Shelly ws:// RPC', 'Mixed Content?', () => tWs(`ws://${v.shelly}/rpc`)],
+    ['es', 'ESPHome EventSource http', 'Mixed Content?', () => tEs(`http://${v.esphome}/events`)],
+  ];
+}
+
+// --- Ablauf -------------------------------------------------------------------------
+let last = null;
+const fmt = (r) => r.result === 'ok' ? `<span class="ok">ok</span>` : r.result === 'timeout' ? `<span class="warn">timeout</span>` : `<span class="bad">error</span>`;
+
+$('run').addEventListener('click', async () => {
+  const v = Object.fromEntries(FIELDS.map((f) => [f, $(f).value.trim()]));
+  try { localStorage.setItem('lna-test', JSON.stringify(v)); } catch {}
+  $('run').disabled = true;
+  const rows = [];
+  const list = tests(v);
+  for (let i = 0; i < list.length; i++) {
+    const [group, name, expect, fn] = list[i];
+    $('status').textContent = `${i + 1}/${list.length}: ${name}`;
+    const r = await fn();
+    r.ms = Math.round(r.ms);
+    rows.push({ group, name, expect, ...r });
+    render(rows);
+  }
+  const e = await showEnv();
+  last = { env: e, targets: v, results: rows };
+  $('status').textContent = 'fertig';
+  $('run').disabled = false;
+  $('copy').disabled = false;
+});
+
+function render(rows) {
+  $('out').innerHTML = `<tr><th>Test</th><th>Erwartung</th><th>Ergebnis</th><th class="num">ms</th><th>Details</th></tr>` +
+    rows.map((r) => `<tr><td>${r.name}</td><td class="muted">${r.expect}</td><td>${fmt(r)}</td><td class="num">${r.ms}</td>
+      <td><code>${[r.type && `type=${r.type}`, r.status != null && `status=${r.status}`, r.size, r.error, r.finalSrc && `src=${r.finalSrc}`, r.body]
+        .filter(Boolean).join(' · ').replace(/</g, '&lt;')}</code></td></tr>`).join('');
+}
+
+$('copy').addEventListener('click', async () => {
+  const text = JSON.stringify(last, null, 2);
+  try { await navigator.clipboard.writeText(text); $('status').textContent = 'kopiert'; }
+  catch { $('status').textContent = 'Kopieren nicht erlaubt – bitte Tabelle abfotografieren'; }
+});
+</script>
+</body>
+</html>
