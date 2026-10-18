@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Netzscan</title>
+<meta name="description" content="Lokales Netz im Browser untersuchen: Gateway, Geräte, Weboberflächen und offene Ports – ohne Installation.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%230ea5a4'/%3E%3Ccircle cx='16' cy='16' r='5' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="dot"></span>Netzscan</div>
+  <div class="current" id="current"></div>
+  <div class="privacy" title="Alle Anfragen gehen direkt von deinem Browser ins lokale Netz. Es wird nichts hochgeladen.">läuft lokal im Browser</div>
+</header>
+
+<div class="progress" id="progress" hidden>
+  <div class="bar"><span id="progressBar"></span></div>
+  <span id="progressText"></span>
+  <button class="btn small danger" id="stopBtn" type="button">Abbrechen</button>
+</div>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="netze" aria-selected="true">Netze</button>
+  <button role="tab" data-tab="uebersicht" aria-selected="false">Übersicht</button>
+  <button role="tab" data-tab="geraete" aria-selected="false">Geräte <span id="devCount" class="count">0</span></button>
+  <button role="tab" data-tab="dienste" aria-selected="false">Dienste <span id="svcCount" class="count">0</span></button>
+  <button role="tab" data-tab="web" aria-selected="false">Weboberflächen <span id="webCount" class="count">0</span></button>
+</nav>
+
+<main>
+  <section id="tab-netze" class="tab"></section>
+  <section id="tab-uebersicht" class="tab" hidden></section>
+  <section id="tab-dienste" class="tab" hidden></section>
+  <section id="tab-web" class="tab" hidden></section>
+  <section id="tab-geraete" class="tab" hidden>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Suchen: IP, Port, IP:Port…" spellcheck="false">
+    </div>
+    <div class="tablewrap">
+      <table class="devices">
+        <thead><tr>
+          <th data-sort="ip">IP</th>
+          <th>Name</th>
+          <th>MAC</th>
+          <th data-sort="ports">Offene Ports <span class="muted">(Klick = öffnen, ⧉ = IP:Port kopieren)</span></th>
+          <th data-sort="lastSeen">Gesehen</th>
+        </tr></thead>
+        <tbody id="devBody"></tbody>
+      </table>
+      <p id="devEmpty" class="empty"></p>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

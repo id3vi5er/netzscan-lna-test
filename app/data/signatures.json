@@ -1,0 +1,34 @@
+{
+  "_info": "Gerätesignaturen. verified=true: am 2026-10-19 gegen echte Geräte getestet. Bildpfade werden per <img> geladen (kein CORS nötig); 'size' prüft zusätzlich die Bildmaße.",
+
+  "images": [
+    { "id": "homeassistant", "name": "Home Assistant", "type": "server", "category": "smarthome",
+      "ports": [8123, 80, 443], "path": "/static/images/home-assistant-logo-loading.svg", "verified": true },
+    { "id": "npm", "name": "Nginx Proxy Manager", "type": "service", "category": "infra",
+      "ports": [81], "path": "/images/favicons/safari-pinned-tab.svg", "verified": true },
+    { "id": "homepage", "name": "Homepage (Dashboard)", "type": "service", "category": "web",
+      "ports": [3000, 80, 8080], "path": "/homepage.ico", "verified": true },
+    { "id": "uptimekuma", "name": "Uptime Kuma", "type": "service", "category": "infra",
+      "ports": [3001], "path": "/icon.svg", "size": "640x640", "verified": true },
+    { "id": "proxmox", "name": "Proxmox VE", "type": "server", "category": "infra",
+      "ports": [8006], "path": "/pve2/images/logo-128.png", "verified": true },
+    { "id": "grafana", "name": "Grafana", "type": "service", "category": "infra",
+      "ports": [3000], "path": "/public/img/grafana_icon.svg", "verified": false },
+    { "id": "pihole", "name": "Pi-hole", "type": "service", "category": "infra",
+      "ports": [80, 8080], "path": "/admin/img/logo.svg", "verified": false },
+    { "id": "octoprint", "name": "OctoPrint", "type": "printer", "category": "print",
+      "ports": [80, 5000], "path": "/static/img/tentacle-32x32.png", "verified": false },
+    { "id": "nodered", "name": "Node-RED", "type": "service", "category": "smarthome",
+      "ports": [1880], "path": "/red/images/node-red.svg", "verified": false },
+    { "id": "plex", "name": "Plex", "type": "media", "category": "media",
+      "ports": [32400], "path": "/web/favicon.ico", "verified": false },
+    { "id": "jellyfin", "name": "Jellyfin", "type": "media", "category": "media",
+      "ports": [8096], "path": "/web/favicon.ico", "verified": false }
+  ],
+
+  "portRules": [
+    { "id": "fritz", "name": "FRITZ!Box", "nameNotGateway": "FRITZ!-Gerät (Repeater/Mesh)",
+      "type": "router", "category": "infra", "vendor": "AVM", "ports": [49000],
+      "note": "TR-064 auf Port 49000 ist typisch für AVM", "verified": true }
+  ]
+}
